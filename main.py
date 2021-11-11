@@ -18,6 +18,9 @@ def create_df(name):
     df = df.astype(float)
     df.index = pd.to_datetime(df.index.str[:-8], format='%d.%m.%Y %H:%M')
     df.columns = columns
+    df = df / 1000
+    df[columns[0]] *= -1
+    df[columns[2]] *= -1
     return df
 
 
