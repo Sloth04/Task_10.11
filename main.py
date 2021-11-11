@@ -2,48 +2,41 @@ import os
 import pandas as pd
 from glob import glob
 import numpy as np
-from functools import reduce
+from datetime import timedelta as td
+
+columns = ['Команди на розвантаження, МВт*год',
+           'Команди на завантаження, МВт*год',
+           'Обсяг відбору (споживання), КВт*год',
+           'Обсяг відпуску (генерації), МВт*год']
+columns_order = ['День', 'Розрахунковий період'] + columns
 
 
 def create_df(name):
-    df = pd.read_csv(name, sep=';', index_col=0)
+    df = pd.read_csv(name, sep=';', index_col=0, usecols=[0, 3, 4, 5, 6], skiprows=1)
     df.replace(np.nan, 0, regex=True, inplace=True)
-    df = df.drop(df.columns[6], axis=1)
-    df = df.iloc[1:]
-    columns = df.columns
-    for col in columns:
-        df.loc[df[col] == "ff", col] = np.nan
-        df[col] = df[col] \
-            .replace('f', '', regex=True)
-        df[col] = df[col] \
-            .replace('-', '', regex=True)
-        df[col] = df[col] \
-            .replace(',', '', regex=True)
-    for col in columns:
-        df = df.astype(float)
-        df[col] = df[col].div(1000).round(decimals=3)
-        df[col].apply(lambda x: f'{x:.0f}')
-    df.fillna(0, inplace=True)
+    df.replace({'ff': 0, 'f': '', ',': '', np.nan: 0, '-': ''}, regex=True, inplace=True)
+    df = df.astype(float)
+    df.index = pd.to_datetime(df.index.str[:-8], format='%d.%m.%Y %H:%M')
+    df.columns = columns
     return df
 
 
 def main():
     list_df = []
     cwd = os.path.dirname(os.path.abspath(__file__))
-    target = os.path.join(cwd, "input", '*HPP.csv')
+    target = os.path.join(cwd, 'input', '*.csv')
     dir_list = glob(target)
     for item in dir_list:
-        name_df = create_df(item)
-        list_df.append(name_df)
-    df_result = reduce(lambda a, b: a.add(b, fill_value=0), list_df)
-    # df_result = df_result.astype(str)
-
-    # for col in df_result.columns:
-    #     df_result[col] = df_result[col] \
-    #         .replace('\\.', ',', regex=True)  # required format
-
-    df_result.to_csv('output_result.csv', sep=';')
-    print(df_result)
+        list_df.append(create_df(item))
+    df = pd.concat(list_df)
+    df = df.groupby(pd.Grouper(freq='H')).sum()
+    df['День'] = df.index.date
+    df['Розрахунковий період'] = df.index.time.astype(str)
+    df['Розрахунковий період'] += ' - '
+    df['Розрахунковий період'] += (df.index + td(hours=1)).time.astype(str)
+    df = df[columns_order]
+    print(df.head().to_string())
+    df.to_excel('output_result.xlsx', index=False)
 
 
 if __name__ == '__main__':
